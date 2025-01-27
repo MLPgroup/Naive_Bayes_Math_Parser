@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Article Access Dashboard</title>
-    <script src="https://d3js.org/d3.v6.min.js"></script>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-    <script type="text/javascript" async
+    <title>LaTeX Renderer</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" id="MathJax-script" async
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="stylesheet" href="static/css/mathquill.css">
+    <script src="static/js/mathquill.js"></script>
     <style>
         /* General Styling */
         body {
@@ -28,16 +29,19 @@
             align-items: center;
         }
 
-        #latex-input {
+        #mathquill-editor {
             width: 80%;
-            padding: 10px;
-            font-size: 16px;
+            min-height: 40px;
             border: 1px solid #ced4da;
             border-radius: 4px;
+            padding: 5px;
+            background-color: white;
             margin-bottom: 10px;
+            font-size: 16px;
+            text-align: left;
         }
 
-        #submit-btn {
+        #submit-btn, #clear-btn {
             background-color: #007bff;
             color: white;
             border: none;
@@ -46,215 +50,96 @@
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.2s;
+            margin: 5px;
         }
 
-        #submit-btn:hover {
+        #submit-btn:hover, #clear-btn:hover {
             background-color: #0056b3;
         }
 
-        /* Chart Container Styling */
-        #chart-container {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            padding-bottom: 20px;
-            justify-items: center;
-            max-width: 1500px;
+        /* Rendered LaTeX Styling */
+        #rendered-latex {
+            width: 80%;
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: white;
         }
 
-        .chart-card {
-            background: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            transition: transform 0.2s;
-            width: 100%;
-            max-width: 600px;
-            align-items: center;
+        /* Examples Styling */
+        #examples {
+            width: 80%;
+            margin-top: 20px;
+            font-size: 14px;
+            line-height: 1.5;
         }
 
-        .chart-content {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 30px;
-        }
-
-        .chart-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #343a40;
-            text-align: center;
-        }
-
-        svg path {
-            stroke: #333;
-            stroke-width: 3px;
-            transition: transform 0.2s;
-        }
-
-        /* Tooltip Styling */
-        .tooltip {
-            position: absolute;
-            visibility: hidden;
-            background-color: #ffffff;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-            width: 300px;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .tooltip-content {
-            flex: 1;
-        }
-
-        .tooltip a {
-            color: #007bff;
-            text-decoration: none;
-            display: block;
-            margin: 5px 0;
-        }
-
-        .tooltip a:hover {
-            text-decoration: underline;
-        }
-
-        .close-btn {
-            align-self: flex-end;
-            background: none;
-            border: none;
-            color: #555;
-            font-size: 18px;
-            cursor: pointer;
-        }
-
-        .legend {
-            display: flex;
-            flex-direction: column;
-            white-space: nowrap;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin: 5px 0;
-        }
-
-        .legend-color {
-            width: 12px;
-            height: 12px;
-            margin-right: 5px;
-            border-radius: 50%;
+        #examples ul {
+            padding-left: 20px;
         }
     </style>
 </head>
 <body>
     <!-- LaTeX Input Bar -->
     <div id="latex-input-bar">
-        <textarea id="latex-input" rows="3" placeholder="Enter LaTeX equation here..."></textarea>
-        <button id="submit-btn">Process Equation</button>
+        <p><strong>Enter LaTeX Equation:</strong></p>
+        <div id="mathquill-editor" class="mathquill-editor"></div>
+        <div>
+            <button id="submit-btn">Render LaTeX</button>
+            <button id="clear-btn">Clear Output</button>
+        </div>
     </div>
 
-    <!-- Chart Container -->
-    <div id="chart-container"></div>
-    
-    <!-- Tooltip -->
-    <div id="tooltip" class="tooltip">
-        <button class="close-btn" onclick="hideTooltip()">×</button>
-        <div class="tooltip-content"></div>
+    <!-- Rendered LaTeX Output -->
+    <div id="rendered-latex">
+        <p><strong>Rendered Equation:</strong></p>
+        <div id="latex-output"></div>
+    </div>
+
+    <!-- Example Section -->
+    <div id="examples">
+        <p><strong>Examples of LaTeX equations:</strong></p>
+        <ul>
+            <li><code>x^2 + y^2 = z^2</code></li>
+            <li><code>\frac{a}{b} + \sqrt{c}</code></li>
+            <li><code>\int_0^\infty e^{-x} dx</code></li>
+        </ul>
     </div>
 
     <script>
-        // Access inverted_articles data passed from Flask
-        const chartData = JSON.parse(`{{ inverted_articles | safe }}`);
-
-        const width = 250;
-        const height = 250;
-        const radius = Math.min(width, height) / 2;
-
-        const color = d3.scaleOrdinal(d3.schemeCategory10);
-
-        const tooltip = d3.select("#tooltip");
-        const tooltipContent = d3.select(".tooltip-content");
-        const chartContainer = d3.select("#chart-container");
-
-        function hideTooltip() {
-            tooltip.style("visibility", "hidden");
-        }
-
-        Object.keys(chartData).forEach(function(key) {
-            const data = chartData[key];
-
-            const pieData = Object.keys(data).map(category => ({
-                label: category,
-                value: data[category].length,
-                articles: data[category].map(article => article.replace(/\.html$/, ""))
-            })).filter(d => d.value > 0);
-
-            const totalValue = pieData.reduce((sum, d) => sum + d.value, 0);
-
-            const chartCard = chartContainer.append("div").attr("class", "chart-card");
-            chartCard.append("div").attr("class", "chart-title").text(key);
-
-            const chartContent = chartCard.append("div").attr("class", "chart-content");
-            const svg = chartContent.append("svg")
-                .attr("width", width)
-                .attr("height", height)
-                .append("g")
-                .attr("transform", `translate(${width / 2}, ${height / 2})`);
-
-            const pie = d3.pie().value(d => d.value);
-            const arc = d3.arc().outerRadius(radius - 10).innerRadius(0);
-
-            svg.selectAll("path")
-                .data(pie(pieData))
-                .enter().append("path")
-                .attr("d", arc)
-                .attr("fill", d => color(d.data.label))
-                .on("click", function(event, d) {
-                    const percentage = ((d.data.value / totalValue) * 100).toFixed(1);
-                    let tooltipHtml = `<strong>${key} - ${d.data.label}</strong><br>`;
-                    tooltipHtml += `<p>${percentage}% of total</p>`;
-                    tooltipHtml += d.data.articles.map(article => `<a href="https://en.wikipedia.org/wiki/${encodeURIComponent(article)}" target="_blank">${article}</a>`).join('');
-
-                    tooltipContent.html(tooltipHtml);
-                    tooltip.style("visibility", "visible")
-                           .style("top", (event.pageY - 20) + "px")
-                           .style("left", (event.pageX + 20) + "px");
-                });
-
-            const legend = chartContent.append("div").attr("class", "legend");
-            pieData.forEach((d) => {
-                const legendItem = legend.append("div").attr("class", "legend-item");
-                legendItem.append("div").attr("class", "legend-color").style("background-color", color(d.label));
-                legendItem.append("span").text(d.label);
-            });
+        // Initialize MathQuill
+        const MQ = MathQuill.getInterface(2);
+        const mathField = MQ.MathField(document.getElementById('mathquill-editor'), {
+            spaceBehavesLikeTab: true,
+            handlers: {
+                edit: function() {
+                    console.log("MathField edited.");
+                }
+            }
         });
 
-        // Submit LaTeX equation
-        document.getElementById('submit-btn').addEventListener('click', () => {
-            const latexInput = document.getElementById('latex-input').value;
+        const submitBtn = document.getElementById('submit-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const latexOutput = document.getElementById('latex-output');
 
-            fetch('/process_latex', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ latex: latexInput })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.contentMathML) {
-                    alert(`Content MathML: ${data.contentMathML}`);
-                } else if (data.error) {
-                    alert(`Error: ${data.error}`);
-                }
-            })
-            .catch(error => console.error('Error:', error));
+        // Render LaTeX on submit
+        submitBtn.addEventListener('click', () => {
+            const latex = mathField.latex(); // Get LaTeX from MathQuill
+            latexOutput.innerHTML = ''; // Clear previous output
+            try {
+                // Render LaTeX with MathJax
+                latexOutput.innerHTML = `\\(${latex}\\)`;
+                MathJax.typeset();
+            } catch (error) {
+                latexOutput.innerHTML = '<span style="color:red;">Invalid LaTeX input.</span>';
+            }
+        });
+
+        // Clear the rendered output and editor input
+        clearBtn.addEventListener('click', () => {
+            latexOutput.innerHTML = '';
+            mathField.latex('');
         });
     </script>
 </body>
