@@ -127,13 +127,26 @@
         submitBtn.addEventListener('click', () => {
             const latex = mathField.latex(); // Get LaTeX from MathQuill
             latexOutput.innerHTML = ''; // Clear previous output
-            try {
-                // Render LaTeX with MathJax
-                latexOutput.innerHTML = `\\(${latex}\\)`;
-                MathJax.typeset();
-            } catch (error) {
-                latexOutput.innerHTML = '<span style="color:red;">Invalid LaTeX input.</span>';
-            }
+
+            latexOutput.innerHTML = `\\(${latex}\\)`;
+            MathJax.typeset(); // Render with MathJax
+
+            fetch('/process_latex', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ latex: latex })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.contentMathML) {
+                        console.log("Content MathML received:", data.contentMathML);
+                    } else if (data.error) {
+                        console.error("Error from server:", data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                });
         });
 
         // Clear the rendered output and editor input
