@@ -9,6 +9,7 @@
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <link rel="stylesheet" href="static/css/mathquill.css">
     <script src="static/js/mathquill.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* General Styling */
         body {
@@ -67,16 +68,74 @@
             background-color: white;
         }
 
-        /* Examples Styling */
-        #examples {
-            width: 80%;
+        /* Pie Chart and Legend Layout */
+        .chart-legend-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
             margin-top: 20px;
-            font-size: 14px;
-            line-height: 1.5;
+            width: 100%;
+            max-width: 900px;
         }
 
-        #examples ul {
-            padding-left: 20px;
+        #pie-chart {
+            width: 50%;
+            max-width: 400px;
+            margin-right: 50px;
+        }
+
+        .legend {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: white;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            margin-right: 10px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+
+        /* Floating Article Box Styling */
+        #article-box {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+
+        #article-box button {
+            display: block;
+            margin-left: auto;
+            background-color: #ff5c5c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #article-box button:hover {
+            background-color: #ff3c3c;
         }
     </style>
 </head>
@@ -97,15 +156,14 @@
         <div id="latex-output"></div>
     </div>
 
-    <!-- Example Section -->
-    <div id="examples">
-        <p><strong>Examples of LaTeX equations:</strong></p>
-        <ul>
-            <li><code>x^2 + y^2 = z^2</code></li>
-            <li><code>\frac{a}{b} + \sqrt{c}</code></li>
-            <li><code>\int_0^\infty e^{-x} dx</code></li>
-        </ul>
+    <!-- Chart and Legend Section -->
+    <div class="chart-legend-container">
+        <canvas id="pie-chart"></canvas>
+        <div class="legend" id="legend-container"></div>
     </div>
+
+    <!-- Floating Article Box -->
+    <div id="article-box"></div>
 
     <script>
         // Initialize MathQuill
@@ -113,7 +171,7 @@
         const mathField = MQ.MathField(document.getElementById('mathquill-editor'), {
             spaceBehavesLikeTab: true,
             handlers: {
-                edit: function() {
+                edit: function () {
                     console.log("MathField edited.");
                 }
             }
@@ -122,37 +180,90 @@
         const submitBtn = document.getElementById('submit-btn');
         const clearBtn = document.getElementById('clear-btn');
         const latexOutput = document.getElementById('latex-output');
+        const legendContainer = document.getElementById('legend-container');
+        const articleBox = document.getElementById('article-box');
 
         // Render LaTeX on submit
         submitBtn.addEventListener('click', () => {
-            const latex = mathField.latex(); // Get LaTeX from MathQuill
-            latexOutput.innerHTML = ''; // Clear previous output
-
+            const latex = mathField.latex();
             latexOutput.innerHTML = `\\(${latex}\\)`;
-            MathJax.typeset(); // Render with MathJax
+            MathJax.typeset();
 
             fetch('/process_latex', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ latex: latex })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.contentMathML) {
-                        console.log("Content MathML received:", data.contentMathML);
-                    } else if (data.error) {
-                        console.error("Error from server:", data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error("Error:", error);
-                });
+            });
         });
-        // Clear the rendered output and editor input
+
         clearBtn.addEventListener('click', () => {
             latexOutput.innerHTML = '';
             mathField.latex('');
         });
+
+        function fetchDisciplinesData() {
+            fetch('/get_disciplines')
+                .then(response => response.json())
+                .then(data => {
+                    renderChart(data);
+                })
+                .catch(error => console.error("Error fetching data:", error));
+        }
+
+        function renderChart(data) {
+            const ctx = document.getElementById('pie-chart').getContext('2d');
+            const labels = Object.keys(data);
+            const values = labels.map(label => data[label].length);
+
+            const pieChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'],
+                        borderColor: '#ffffff',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const articles = data[labels[index]].map(article => `<li><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(article.replace('.html', ''))}" target="_blank">${article.replace('.html', '')}</a></li>`);
+                            showArticleBox(event, articles);
+                        }
+                    }
+                }
+            });
+
+            legendContainer.innerHTML = labels.map((label, index) => `
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: ${pieChart.data.datasets[0].backgroundColor[index]};"></span>
+                    ${label}
+                </div>
+            `).join('');
+        }
+
+        function showArticleBox(event, articles) {
+            articleBox.innerHTML = `
+                <button onclick="closeArticleBox()">✖</button>
+                <strong>Articles:</strong>
+                <ul>${articles.join('')}</ul>
+            `;
+            articleBox.style.display = 'block';
+            articleBox.style.left = `${event.chart.canvas.offsetLeft + event.x}px`;
+            articleBox.style.top = `${event.chart.canvas.offsetTop + event.y}px`;
+        }
+
+        function closeArticleBox() {
+            articleBox.style.display = 'none';
+        }
+
+        fetchDisciplinesData();
     </script>
 </body>
 </html>
