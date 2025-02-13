@@ -158,7 +158,7 @@
     </div>
 
     <!-- Chart and Legend Section -->
-    <div class="chart-legend-container">
+    <div class="chart-legend-container" style="display: none">
         <canvas id="pie-chart"></canvas>
         <div class="legend" id="legend-container"></div>
     </div>
@@ -211,6 +211,24 @@
         clearBtn.addEventListener('click', () => {
             latexOutput.innerHTML = '';
             mathField.latex('');
+
+            if (pieChart) {
+                pieChart.destroy();
+                pieChart = null;
+            }
+
+            // Hide the entire chart-legend container
+            document.querySelector('.chart-legend-container').style.display = 'none';
+            legendContainer.innerHTML = ''; // Clear legend
+            legendContainer.style.display = 'none';
+
+            // Reset backend data to ensure no old data persists
+            fetch('/clear_disciplines', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => console.log(data.message))
+                .catch(error => console.error("Error clearing disciplines:", error));
+
+            console.log("Page has been reset");
         });
 
         function fetchDisciplinesData() {
@@ -223,6 +241,11 @@
         }
 
         function renderChart(data) {
+            if (!data || Object.keys(data).length === 0) {
+                document.querySelector('.chart-legend-container').style.display = 'none';
+                return;
+            }
+
             const ctx = document.getElementById('pie-chart').getContext('2d');
             const labels = Object.keys(data);
             const values = labels.map(label => data[label].length);
@@ -256,6 +279,10 @@
                 }
             });
 
+            // Show the chart container once data is available
+            document.querySelector('.chart-legend-container').style.display = 'flex';
+
+            // Update the legend
             legendContainer.innerHTML = labels.map((label, index) => `
                 <div class="legend-item">
                     <span class="legend-color" style="background-color: ${pieChart.data.datasets[0].backgroundColor[index]};"></span>
@@ -263,6 +290,7 @@
                 </div>
             `).join('');
         }
+
 
         function showArticleBox(event, articles) {
             articleBox.innerHTML = `
